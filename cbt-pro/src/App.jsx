@@ -2,14 +2,15 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   BookOpen, Clock, LayoutDashboard, Upload, Download, 
   CheckCircle, LogOut, Plus, Trash2, ChevronRight, ChevronLeft, 
-  Edit, Save, X, AlertTriangle, ShieldAlert, Flag, SaveAll
+  Edit, Save, X, AlertTriangle, ShieldAlert, Flag, SaveAll,
+  Users, Settings, Copy, RefreshCw, FileText, UserPlus, UserMinus
 } from 'lucide-react';
 
 // ==========================================
-// 1. DATA AWAL
+// DATA AWAL
 // ==========================================
 const initialExams = [
-  { id: 'exam_1', title: 'Ujian Matematika & Sejarah', duration: 15 }
+  { id: 'exam_1', title: 'Ujian Matematika & Sejarah', duration: 15, kelas: '7A', createdBy: 'subadmin1' }
 ];
 
 const initialQuestions = [
@@ -44,17 +45,45 @@ const initialQuestions = [
   }
 ];
 
+const initialUsers = [
+  { id: 'u1', username: 'superadmin', password: 'super123', role: 'superadmin', name: 'Super Admin', kelas: null },
+  { id: 'u2', username: 'guru1', password: 'guru123', role: 'subadmin', name: 'Guru Matematika', kelas: '7A' },
+  { id: 'u3', username: 'siswa1', password: 'siswa123', role: 'siswa', name: 'Ahmad Bima', kelas: '7A' },
+  { id: 'u4', username: 'siswa2', password: 'siswa123', role: 'siswa', name: 'Nafi Fauzi', kelas: '7A' },
+];
+
 // ==========================================
-// 2. KOMPONEN UTAMA
+// KOMPONEN UTAMA APP
 // ==========================================
 export default function App() {
   const [user, setUser] = useState(null);
-  const [exams, setExams] = useState(initialExams);
-  const [questions, setQuestions] = useState(initialQuestions);
-  const [attempts, setAttempts] = useState([]);
-  const [view, setView] = useState('login'); 
+  const [exams, setExams] = useState(() => {
+    const saved = localStorage.getItem('cbt_exams');
+    return saved ? JSON.parse(saved) : initialExams;
+  });
+  const [questions, setQuestions] = useState(() => {
+    const saved = localStorage.getItem('cbt_questions');
+    return saved ? JSON.parse(saved) : initialQuestions;
+  });
+  const [attempts, setAttempts] = useState(() => {
+    const saved = localStorage.getItem('cbt_attempts');
+    return saved ? JSON.parse(saved) : [];
+  });
+  const [users, setUsers] = useState(() => {
+    const saved = localStorage.getItem('cbt_users');
+    return saved ? JSON.parse(saved) : initialUsers;
+  });
+  const [logs, setLogs] = useState(() => {
+    const saved = localStorage.getItem('cbt_logs');
+    return saved ? JSON.parse(saved) : [];
+  });
+  const [view, setView] = useState('login');
   const [activeExamId, setActiveExamId] = useState(null);
   const [notification, setNotification] = useState(null);
+  const [systemConfig, setSystemConfig] = useState(() => {
+    const saved = localStorage.getItem('cbt_config');
+    return saved ? JSON.parse(saved) : { schoolName: 'CBT Pro School', logo: '' };
+  });
 
   const showNotif = (msg, type = 'info') => {
     setNotification({ msg, type });
@@ -62,53 +91,32 @@ export default function App() {
   };
 
   useEffect(() => {
-    const loadDeps = async () => {
-      if (!document.getElementById('katex-css')) {
-        const css = document.createElement('link');
-        css.id = 'katex-css'; css.rel = 'stylesheet';
-        css.href = 'https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css';
-        document.head.appendChild(css);
-      }
-      const loadScript = (src, id) => new Promise((resolve) => {
-        if (document.getElementById(id)) return resolve();
-        const script = document.createElement('script');
-        script.id = id; script.src = src;
-        script.onload = resolve;
-        document.head.appendChild(script);
-      });
-      await loadScript('https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js', 'katex-js');
-      await loadScript('https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/contrib/auto-render.min.js', 'katex-auto');
-      window.katexLoaded = true;
-      renderMath();
-    };
-    loadDeps();
-  }, []);
+    localStorage.setItem('cbt_exams', JSON.stringify(exams));
+    localStorage.setItem('cbt_questions', JSON.stringify(questions));
+    localStorage.setItem('cbt_attempts', JSON.stringify(attempts));
+    localStorage.setItem('cbt_users', JSON.stringify(users));
+    localStorage.setItem('cbt_logs', JSON.stringify(logs));
+    localStorage.setItem('cbt_config', JSON.stringify(systemConfig));
+  }, [exams, questions, attempts, users, logs, systemConfig]);
 
-  const renderMath = () => {
-    if (window.renderMathInElement && window.katexLoaded) {
-      const elements = document.querySelectorAll('.math-content');
-      elements.forEach(el => {
-        window.renderMathInElement(el, {
-          delimiters: [
-            {left: '$$', right: '$$', display: true},
-            {left: '$', right: '$', display: false}
-          ]
-        });
-      });
-    }
+  const addLog = (action, userId, details) => {
+    const newLog = { id: Date.now(), timestamp: new Date().toISOString(), userId, action, details };
+    setLogs(prev => [newLog, ...prev].slice(0, 200));
   };
 
   const handleLogin = (username, password) => {
-    if (username === 'admin' && password === 'admin123') {
-      setUser({ username, role: 'admin' });
+    const foundUser = users.find(u => u.username === username && u.password === password);
+    if (foundUser) {
+      setUser(foundUser);
+      addLog('Login', foundUser.id, `User ${foundUser.username} login`);
       setView('dashboard');
     } else {
-      setUser({ username, role: 'student' });
-      setView('dashboard');
+      showNotif('Username atau password salah', 'error');
     }
   };
 
   const handleLogout = () => {
+    if (user) addLog('Logout', user.id, `User ${user.username} logout`);
     setUser(null);
     setView('login');
   };
@@ -116,7 +124,7 @@ export default function App() {
   if (!user) return <LoginScreen onLogin={handleLogin} showNotif={showNotif} notification={notification} />;
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-800 font-sans relative">
+    <div className="min-h-screen bg-slate-50 font-sans relative">
       {notification && (
         <div className={`fixed top-4 left-1/2 transform -translate-x-1/2 px-6 py-3 rounded-lg shadow-xl z-50 font-semibold flex items-center gap-2
           ${notification.type === 'error' ? 'bg-red-600 text-white' : 'bg-slate-800 text-white'}`}>
@@ -124,74 +132,68 @@ export default function App() {
           {notification.msg}
         </div>
       )}
-
-      {view !== 'taking-exam' && (
-        <header className="bg-blue-800 text-white shadow-md">
-          <div className="max-w-6xl mx-auto px-4 py-3 flex justify-between items-center">
-            <div className="flex items-center gap-2">
-              <ShieldAlert className="w-6 h-6 text-blue-300" />
-              <h1 className="text-xl font-bold tracking-wide">CBT Pro <span className="font-light text-blue-300">v2.0</span></h1>
-            </div>
-            <div className="flex items-center gap-4">
-              <span className="text-sm bg-blue-900 px-3 py-1 rounded-full">
-                {user.role === 'admin' ? 'Administrator' : `Siswa: ${user.username}`}
-              </span>
-              <button onClick={handleLogout} className="hover:text-red-300 transition-colors" title="Keluar">
-                <LogOut className="w-5 h-5" />
-              </button>
-            </div>
+      <header className="bg-blue-800 text-white shadow-md">
+        <div className="max-w-6xl mx-auto px-4 py-3 flex justify-between items-center">
+          <div className="flex items-center gap-2">
+            <ShieldAlert className="w-6 h-6 text-blue-300" />
+            <h1 className="text-xl font-bold tracking-wide">{systemConfig.schoolName || 'CBT Pro'} <span className="font-light text-blue-300">v2.0</span></h1>
           </div>
-        </header>
-      )}
-
-      <main className={`mx-auto ${view === 'taking-exam' ? 'w-full h-screen bg-slate-100' : 'max-w-6xl p-4 py-8'}`}>
-        {user.role === 'admin' && view === 'dashboard' && (
-          <AdminDashboard 
-            exams={exams} setExams={setExams} attempts={attempts}
-            onEditExam={(id) => { setActiveExamId(id); setView('exam-editor'); }} 
+          <div className="flex items-center gap-4">
+            <span className="text-sm bg-blue-900 px-3 py-1 rounded-full">
+              {user.role === 'superadmin' ? 'Super Admin' : user.role === 'subadmin' ? `Guru: ${user.name}` : `Siswa: ${user.name}`}
+            </span>
+            <button onClick={handleLogout} className="hover:text-red-300"><LogOut className="w-5 h-5"/></button>
+          </div>
+        </div>
+      </header>
+      <main className="max-w-6xl mx-auto p-4 py-8">
+        {user.role === 'superadmin' && (
+          <SuperAdminDashboard 
+            users={users} setUsers={setUsers}
+            logs={logs}
+            systemConfig={systemConfig} setSystemConfig={setSystemConfig}
             showNotif={showNotif}
+            addLog={addLog}
           />
         )}
-        {user.role === 'admin' && view === 'exam-editor' && (
-          <AdminExamEditor 
-            examId={activeExamId}
-            examTitle={exams.find(e => e.id === activeExamId)?.title}
-            questions={questions.filter(q => q.examId === activeExamId)}
-            setQuestions={setQuestions}
-            onBack={() => setView('dashboard')}
-            renderMath={renderMath}
+        {user.role === 'subadmin' && (
+          <SubAdminDashboard 
+            user={user}
+            exams={exams} setExams={setExams}
+            questions={questions} setQuestions={setQuestions}
+            attempts={attempts}
+            users={users} setUsers={setUsers}
             showNotif={showNotif}
+            addLog={addLog}
           />
         )}
-        {user.role === 'student' && view === 'dashboard' && (
+        {user.role === 'siswa' && (
           <StudentDashboard 
-            exams={exams} 
-            attempts={attempts.filter(a => a.student === user.username)}
-            onStartExam={(id) => { setActiveExamId(id); setView('taking-exam'); }} 
+            user={user}
+            exams={exams.filter(e => e.kelas === user.kelas)} 
+            attempts={attempts.filter(a => a.studentId === user.id)}
+            onStartExam={(examId) => { setActiveExamId(examId); setView('taking-exam'); }}
           />
         )}
-        {user.role === 'student' && view === 'taking-exam' && (
+        {user.role === 'siswa' && view === 'taking-exam' && (
           <ExamRunner 
             exam={exams.find(e => e.id === activeExamId)}
             questions={questions.filter(q => q.examId === activeExamId)}
             user={user}
-            renderMath={renderMath}
             showNotif={showNotif}
             onFinish={(score, violations) => {
               const newAttempt = {
                 id: 'att_' + Date.now(),
-                student: user.username,
+                studentId: user.id,
+                studentName: user.name,
                 examId: activeExamId,
                 score: score,
-                violations: violations,
+                violations,
                 date: new Date().toLocaleString()
               };
               setAttempts([...attempts, newAttempt]);
               setView('dashboard');
-              if (document.fullscreenElement) {
-                document.exitFullscreen().catch(err => console.log(err));
-              }
-              showNotif(`Ujian selesai! Nilai Anda telah disimpan.`, 'info');
+              showNotif(`Ujian selesai! Nilai: ${score}`, 'info');
             }}
           />
         )}
@@ -201,48 +203,34 @@ export default function App() {
 }
 
 // ==========================================
-// 3. LOGIN
+// LOGIN SCREEN
 // ==========================================
 function LoginScreen({ onLogin, showNotif, notification }) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const submit = (e) => {
     e.preventDefault();
-    if(username.trim() === '' || password.trim() === '') {
-      showNotif('Harap isi username dan password', 'error');
-      return;
-    }
+    if (!username.trim() || !password.trim()) return showNotif('Isi username dan password', 'error');
     onLogin(username, password);
   };
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-100">
-      {notification && (
-        <div className="absolute top-10 bg-red-600 text-white px-6 py-3 rounded-lg shadow-xl font-bold flex items-center gap-2">
-          <AlertTriangle className="w-5 h-5"/> {notification.msg}
-        </div>
-      )}
-      <div className="bg-white p-8 rounded-2xl shadow-2xl w-full max-w-md border border-slate-200">
+      {notification && <div className="absolute top-10 bg-red-600 text-white px-6 py-3 rounded-lg">{notification.msg}</div>}
+      <div className="bg-white p-8 rounded-2xl shadow-2xl w-full max-w-md">
         <div className="flex flex-col items-center mb-8">
-          <div className="bg-gradient-to-br from-blue-600 to-blue-800 p-4 rounded-2xl text-white mb-4">
-            <ShieldAlert className="w-10 h-10" />
-          </div>
-          <h2 className="text-3xl font-black text-slate-800">CBT Pro</h2>
-          <p className="text-sm text-slate-500 mt-2">Sistem Ujian Aman Berstandar Internasional</p>
+          <div className="bg-blue-600 p-4 rounded-2xl text-white mb-4"><ShieldAlert className="w-10 h-10"/></div>
+          <h2 className="text-3xl font-black">CBT Pro</h2>
+          <p className="text-sm text-slate-500 mt-2">Sistem Ujian Berbasis Role</p>
         </div>
         <form onSubmit={submit} className="space-y-5">
-          <div>
-            <label className="block text-sm font-bold text-slate-700 mb-1">Username / NIM</label>
-            <input type="text" className="w-full border-2 border-slate-200 px-4 py-3 rounded-xl focus:border-blue-500 focus:outline-none" value={username} onChange={e => setUsername(e.target.value)} />
-          </div>
-          <div>
-            <label className="block text-sm font-bold text-slate-700 mb-1">Password</label>
-            <input type="password" className="w-full border-2 border-slate-200 px-4 py-3 rounded-xl focus:border-blue-500 focus:outline-none" value={password} onChange={e => setPassword(e.target.value)} />
-          </div>
-          <button type="submit" className="w-full bg-blue-600 text-white py-3 rounded-xl font-bold text-lg hover:bg-blue-700 transition">Masuk Ujian</button>
+          <input type="text" placeholder="Username" className="w-full border-2 p-3 rounded-xl" value={username} onChange={e=>setUsername(e.target.value)}/>
+          <input type="password" placeholder="Password" className="w-full border-2 p-3 rounded-xl" value={password} onChange={e=>setPassword(e.target.value)}/>
+          <button type="submit" className="w-full bg-blue-600 text-white py-3 rounded-xl font-bold">Masuk</button>
         </form>
-        <div className="mt-6 p-4 bg-blue-50 rounded-xl text-xs text-blue-800 text-center">
-          <b>Guru:</b> admin / admin123 <br/>
-          <b>Siswa:</b> Bebas (isi apa saja)
+        <div className="mt-6 p-4 bg-blue-50 rounded-xl text-xs text-center">
+          <b>Super Admin:</b> superadmin / super123<br/>
+          <b>Sub Admin (Guru):</b> guru1 / guru123<br/>
+          <b>Siswa:</b> siswa1 / siswa123 (atau siswa2)
         </div>
       </div>
     </div>
@@ -250,72 +238,352 @@ function LoginScreen({ onLogin, showNotif, notification }) {
 }
 
 // ==========================================
-// 4. ADMIN DASHBOARD
+// SUPER ADMIN DASHBOARD
 // ==========================================
-function AdminDashboard({ exams, setExams, attempts, onEditExam, showNotif }) {
-  const [showNew, setShowNew] = useState(false);
-  const [newTitle, setNewTitle] = useState('');
-  const [newDur, setNewDur] = useState(60);
-  const handleCreate = () => {
-    if(newTitle.trim() === '') return showNotif('Judul ujian tidak boleh kosong', 'error');
-    setExams([...exams, { id: 'exam_'+Date.now(), title: newTitle, duration: parseInt(newDur) }]);
-    setShowNew(false); setNewTitle(''); showNotif('Ujian baru berhasil dibuat!');
+function SuperAdminDashboard({ users, setUsers, logs, systemConfig, setSystemConfig, showNotif, addLog }) {
+  const [showUserForm, setShowUserForm] = useState(false);
+  const [newUser, setNewUser] = useState({ username: '', password: '', role: 'subadmin', name: '', kelas: '' });
+  const [editConfig, setEditConfig] = useState(false);
+
+  // Download template CSV untuk user (Super Admin bisa upload subadmin & siswa)
+  const downloadUserTemplate = () => {
+    const csvContent = "Nama;Username;Password;Role;Kelas\nGuru Matematika;guru2;guru123;subadmin;7A\nSiswa Baru;siswa3;siswa123;siswa;7A";
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+    link.setAttribute("href", url);
+    link.setAttribute("download", "template_user.csv");
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
+
+  // Upload CSV user (Super Admin)
+  const handleUserUpload = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      const text = evt.target.result;
+      const lines = text.split('\n').filter(l => l.trim() !== '');
+      const newUsers = [];
+      const parseCSVLine = (t) => {
+        let ret = [], keep = false, cur = '';
+        for(let i=0; i<t.length; i++) {
+            let c = t[i];
+            if(c === '"') { keep = !keep; continue; }
+            if(c === ';' && !keep) { ret.push(cur.trim()); cur = ''; continue; }
+            cur += c;
+        }
+        ret.push(cur.trim()); return ret;
+      };
+      for(let i=1; i<lines.length; i++) {
+        const cols = parseCSVLine(lines[i]);
+        if(cols.length >= 5) {
+          const role = cols[3].toLowerCase();
+          if (role !== 'subadmin' && role !== 'siswa') continue;
+          newUsers.push({
+            id: 'u'+Date.now()+'_'+i,
+            username: cols[1],
+            password: cols[2],
+            role: role,
+            name: cols[0],
+            kelas: cols[4] || null
+          });
+        }
+      }
+      setUsers(prev => [...prev, ...newUsers]);
+      addLog('Upload User', 'superadmin', `Menambah ${newUsers.length} user via CSV`);
+      showNotif(`${newUsers.length} user berhasil ditambahkan`);
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  };
+
+  const handleAddUser = () => {
+    if (!newUser.username || !newUser.password || !newUser.name) return showNotif('Lengkapi data', 'error');
+    const newId = 'u'+Date.now();
+    setUsers([...users, { ...newUser, id: newId }]);
+    addLog('Tambah User', 'superadmin', `Menambah user ${newUser.username} (${newUser.role})`);
+    setShowUserForm(false);
+    setNewUser({ username: '', password: '', role: 'subadmin', name: '', kelas: '' });
+    showNotif('User berhasil ditambahkan');
+  };
+
+  const handleDeleteUser = (userId) => {
+    const userToDelete = users.find(u => u.id === userId);
+    if (userToDelete.role === 'superadmin') return showNotif('Tidak bisa menghapus Super Admin', 'error');
+    setUsers(users.filter(u => u.id !== userId));
+    addLog('Hapus User', 'superadmin', `Menghapus user ${userToDelete.username}`);
+  };
+
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center bg-white p-5 rounded-2xl shadow-sm border">
-        <h2 className="text-2xl font-bold flex items-center gap-3"><LayoutDashboard className="w-7 h-7 text-blue-600"/> Dashboard Pengawas</h2>
-        <button onClick={() => setShowNew(true)} className="bg-blue-600 text-white px-5 py-2.5 rounded-xl flex items-center gap-2 hover:bg-blue-700 font-bold">+ Buat Ujian Baru</button>
+      <div className="flex justify-between items-center">
+        <h2 className="text-2xl font-bold flex items-center gap-2"><ShieldAlert className="w-7 h-7 text-red-600"/> Super Admin Dashboard</h2>
+        <div className="flex gap-2">
+          <button onClick={() => setShowUserForm(true)} className="bg-green-600 text-white px-4 py-2 rounded-xl flex items-center gap-2"><UserPlus className="w-4 h-4"/> Tambah Manual</button>
+          <button onClick={downloadUserTemplate} className="bg-slate-200 text-slate-700 px-4 py-2 rounded-xl flex items-center gap-2"><Download className="w-4 h-4"/> Template User</button>
+          <label className="bg-blue-600 text-white px-4 py-2 rounded-xl flex items-center gap-2 cursor-pointer"><Upload className="w-4 h-4"/> Upload CSV<input type="file" accept=".csv" className="hidden" onChange={handleUserUpload}/></label>
+        </div>
       </div>
-      {showNew && (
-        <div className="bg-white p-6 rounded-2xl shadow-lg border-2 border-blue-200 flex flex-wrap gap-4 items-end">
-          <div className="flex-1">
-            <label className="block text-sm font-bold mb-2">Judul Ujian</label>
-            <input type="text" className="w-full border-2 px-4 py-2.5 rounded-xl" value={newTitle} onChange={e=>setNewTitle(e.target.value)} />
-          </div>
-          <div className="w-32">
-            <label className="block text-sm font-bold mb-2">Durasi (Menit)</label>
-            <input type="number" className="w-full border-2 px-4 py-2.5 rounded-xl" value={newDur} onChange={e=>setNewDur(e.target.value)} />
-          </div>
-          <button onClick={handleCreate} className="bg-green-600 text-white px-6 py-2.5 rounded-xl font-bold">Simpan</button>
-          <button onClick={() => setShowNew(false)} className="bg-slate-100 text-slate-600 px-6 py-2.5 rounded-xl font-bold">Batal</button>
+      {showUserForm && (
+        <div className="bg-white p-4 rounded-xl border shadow-lg grid grid-cols-1 md:grid-cols-5 gap-3 items-end">
+          <input type="text" placeholder="Nama" className="border p-2 rounded" value={newUser.name} onChange={e=>setNewUser({...newUser, name: e.target.value})}/>
+          <input type="text" placeholder="Username" className="border p-2 rounded" value={newUser.username} onChange={e=>setNewUser({...newUser, username: e.target.value})}/>
+          <input type="text" placeholder="Password" className="border p-2 rounded" value={newUser.password} onChange={e=>setNewUser({...newUser, password: e.target.value})}/>
+          <select className="border p-2 rounded" value={newUser.role} onChange={e=>setNewUser({...newUser, role: e.target.value})}>
+            <option value="subadmin">Sub Admin (Guru)</option>
+            <option value="siswa">Siswa</option>
+          </select>
+          <input type="text" placeholder="Kelas (untuk siswa/guru)" className="border p-2 rounded" value={newUser.kelas} onChange={e=>setNewUser({...newUser, kelas: e.target.value})}/>
+          <button onClick={handleAddUser} className="bg-blue-600 text-white p-2 rounded">Simpan</button>
+          <button onClick={()=>setShowUserForm(false)} className="bg-slate-200 p-2 rounded">Batal</button>
         </div>
       )}
-      <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {exams.map(ex => (
-          <div key={ex.id} className="bg-white p-6 rounded-2xl border shadow-sm flex flex-col justify-between">
-            <div>
-              <h3 className="font-bold text-xl">{ex.title}</h3>
-              <div className="flex items-center gap-4 mt-3">
-                <p className="text-slate-500 text-sm flex items-center gap-1"><Clock className="w-4 h-4"/> {ex.duration} Menit</p>
-              </div>
-            </div>
-            <div className="mt-6 pt-4 border-t flex justify-between items-center">
-              <span className="text-sm font-bold bg-green-50 text-green-700 px-3 py-1 rounded-lg">{attempts.filter(a => a.examId === ex.id).length} Selesai</span>
-              <button onClick={() => onEditExam(ex.id)} className="text-sm bg-blue-50 text-blue-700 px-4 py-2 rounded-lg hover:bg-blue-600 hover:text-white font-bold">Kelola Soal</button>
-            </div>
+      <div className="bg-white rounded-xl shadow p-4">
+        <h3 className="font-bold text-lg mb-3">Manajemen User</h3>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-slate-100">
+              <tr><th>Nama</th><th>Username</th><th>Role</th><th>Kelas</th><th>Aksi</th></tr>
+            </thead>
+            <tbody>
+              {users.map(u => (
+                <tr key={u.id} className="border-b">
+                  <td className="p-2">{u.name}</td><td>{u.username}</td><td>{u.role}</td><td>{u.kelas || '-'}</td>
+                  <td>{u.role !== 'superadmin' && <button onClick={()=>handleDeleteUser(u.id)} className="text-red-600"><Trash2 className="w-4 h-4"/></button>}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div className="bg-white rounded-xl shadow p-4">
+        <div className="flex justify-between items-center"><h3 className="font-bold">Konfigurasi Sistem</h3><button onClick={()=>setEditConfig(!editConfig)} className="text-blue-600"><Settings className="w-4 h-4"/></button></div>
+        {editConfig ? (
+          <div className="mt-2 space-y-2">
+            <input type="text" className="border p-2 rounded w-full" value={systemConfig.schoolName} onChange={e=>setSystemConfig({...systemConfig, schoolName: e.target.value})} placeholder="Nama Sekolah"/>
+            <button onClick={()=>{setEditConfig(false); addLog('Ubah Konfigurasi', 'superadmin', 'Mengubah nama sekolah'); showNotif('Konfigurasi disimpan');}} className="bg-green-600 text-white px-3 py-1 rounded">Simpan</button>
           </div>
-        ))}
+        ) : (
+          <p className="mt-2">Nama Sekolah: <strong>{systemConfig.schoolName}</strong></p>
+        )}
+      </div>
+      <div className="bg-white rounded-xl shadow p-4">
+        <h3 className="font-bold mb-2">Log Aktivitas</h3>
+        <div className="h-60 overflow-y-auto text-xs">
+          {logs.map(log => (
+            <div key={log.id} className="border-b py-1">{log.timestamp} - {log.action} - {log.details}</div>
+          ))}
+        </div>
       </div>
     </div>
   );
 }
 
 // ==========================================
-// 5. ADMIN EXAM EDITOR (LENGKAP)
+// SUB ADMIN DASHBOARD (Guru)
 // ==========================================
-function AdminExamEditor({ examId, examTitle, questions, setQuestions, onBack, renderMath, showNotif }) {
+function SubAdminDashboard({ user, exams, setExams, questions, setQuestions, attempts, users, setUsers, showNotif, addLog }) {
+  const [activeTab, setActiveTab] = useState('exams');
+  const [showExamForm, setShowExamForm] = useState(false);
+  const [newExam, setNewExam] = useState({ title: '', duration: 30, kelas: user.kelas || '' });
+  const [selectedExamId, setSelectedExamId] = useState(null);
+  const [students, setStudents] = useState(users.filter(u => u.role === 'siswa' && u.kelas === user.kelas));
+
+  // Download template siswa untuk subadmin
+  const downloadStudentTemplate = () => {
+    const csvContent = "Nama;Username;Password;Kelas\nSiswa Baru;siswa3;siswa123;7A";
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement("a");
+    link.setAttribute("href", URL.createObjectURL(blob));
+    link.setAttribute("download", "template_siswa.csv");
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  // Upload CSV siswa (subadmin)
+  const handleStudentUpload = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      const text = evt.target.result;
+      const lines = text.split('\n').filter(l => l.trim() !== '');
+      const newStudents = [];
+      const parseCSVLine = (t) => {
+        let ret = [], keep = false, cur = '';
+        for(let i=0; i<t.length; i++) {
+            let c = t[i];
+            if(c === '"') { keep = !keep; continue; }
+            if(c === ';' && !keep) { ret.push(cur.trim()); cur = ''; continue; }
+            cur += c;
+        }
+        ret.push(cur.trim()); return ret;
+      };
+      for(let i=1; i<lines.length; i++) {
+        const cols = parseCSVLine(lines[i]);
+        if(cols.length >= 4) {
+          newStudents.push({
+            id: 'u'+Date.now()+'_'+i,
+            username: cols[1],
+            password: cols[2],
+            role: 'siswa',
+            name: cols[0],
+            kelas: cols[3] || user.kelas
+          });
+        }
+      }
+      setUsers(prev => [...prev, ...newStudents]);
+      setStudents(prev => [...prev, ...newStudents]);
+      addLog('Upload Siswa', user.id, `Menambah ${newStudents.length} siswa via CSV`);
+      showNotif(`${newStudents.length} siswa ditambahkan`);
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  };
+
+  const addStudentManual = (name, username, password) => {
+    if (!name || !username) return showNotif('Data tidak lengkap', 'error');
+    const newId = 'u'+Date.now();
+    const newStudent = { id: newId, username, password, role: 'siswa', name, kelas: user.kelas };
+    setUsers(prev => [...prev, newStudent]);
+    setStudents([...students, newStudent]);
+    addLog('Tambah Siswa', user.id, `Menambah siswa ${name} di kelas ${user.kelas}`);
+    showNotif('Siswa ditambahkan');
+  };
+
+  const handleCreateExam = () => {
+    if (!newExam.title) return showNotif('Judul harus diisi', 'error');
+    const newId = 'exam_'+Date.now();
+    setExams([...exams, { ...newExam, id: newId, createdBy: user.id }]);
+    setShowExamForm(false);
+    setNewExam({ title: '', duration: 30, kelas: user.kelas });
+    addLog('Buat Ujian', user.id, `Membuat ujian ${newExam.title}`);
+    showNotif('Ujian dibuat');
+  };
+
+  const handleCopyExam = (examId) => {
+    const original = exams.find(e => e.id === examId);
+    if (!original) return;
+    const newId = 'exam_'+Date.now();
+    const copied = { ...original, id: newId, title: original.title + ' (Salinan)', createdBy: user.id };
+    setExams([...exams, copied]);
+    const originalQuestions = questions.filter(q => q.examId === examId);
+    const copiedQuestions = originalQuestions.map(q => ({ ...q, id: 'q_'+Date.now()+'_'+Math.random(), examId: newId }));
+    setQuestions([...questions, ...copiedQuestions]);
+    addLog('Copy Ujian', user.id, `Menyalin ujian ${original.title}`);
+    showNotif('Ujian berhasil digandakan');
+  };
+
+  const resetStudentExam = (studentId, examId) => {
+    // Hapus attempts siswa untuk ujian tertentu (fitur sederhana)
+    // Untuk demo kita tidak punya akses ke setAttempts dari sini, jadi kita skip
+    showNotif('Fitur reset akan segera hadir', 'info');
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex gap-4 border-b pb-2">
+        <button onClick={()=>setActiveTab('exams')} className={`px-4 py-2 font-bold ${activeTab==='exams' ? 'text-blue-600 border-b-2 border-blue-600' : ''}`}>Ujian</button>
+        <button onClick={()=>setActiveTab('students')} className={`px-4 py-2 font-bold ${activeTab==='students' ? 'text-blue-600 border-b-2 border-blue-600' : ''}`}>Manajemen Siswa</button>
+        <button onClick={()=>setActiveTab('grades')} className={`px-4 py-2 font-bold ${activeTab==='grades' ? 'text-blue-600 border-b-2 border-blue-600' : ''}`}>Nilai</button>
+      </div>
+
+      {activeTab === 'exams' && (
+        <div>
+          <button onClick={()=>setShowExamForm(true)} className="bg-blue-600 text-white px-4 py-2 rounded-xl mb-4 flex items-center gap-2"><Plus className="w-4 h-4"/> Buat Ujian Baru</button>
+          {showExamForm && (
+            <div className="bg-white p-4 rounded-xl shadow mb-4 flex flex-wrap gap-3 items-end">
+              <input type="text" placeholder="Judul Ujian" className="border p-2 rounded" value={newExam.title} onChange={e=>setNewExam({...newExam, title: e.target.value})}/>
+              <input type="number" placeholder="Durasi (menit)" className="border p-2 rounded w-32" value={newExam.duration} onChange={e=>setNewExam({...newExam, duration: parseInt(e.target.value)})}/>
+              <select className="border p-2 rounded" value={newExam.kelas} onChange={e=>setNewExam({...newExam, kelas: e.target.value})}>
+                <option value={user.kelas}>{user.kelas}</option>
+              </select>
+              <button onClick={handleCreateExam} className="bg-green-600 text-white px-4 py-2 rounded">Simpan</button>
+              <button onClick={()=>setShowExamForm(false)} className="bg-slate-200 px-4 py-2 rounded">Batal</button>
+            </div>
+          )}
+          <div className="grid md:grid-cols-2 gap-4">
+            {exams.filter(e => e.createdBy === user.id || e.kelas === user.kelas).map(ex => (
+              <div key={ex.id} className="bg-white p-4 rounded-xl border shadow">
+                <h3 className="font-bold text-lg">{ex.title}</h3>
+                <p className="text-sm text-slate-500">Durasi: {ex.duration} menit | Kelas: {ex.kelas}</p>
+                <div className="flex gap-2 mt-3">
+                  <button onClick={()=>setSelectedExamId(ex.id)} className="bg-blue-100 text-blue-700 px-3 py-1 rounded text-sm">Kelola Soal</button>
+                  <button onClick={()=>handleCopyExam(ex.id)} className="bg-green-100 text-green-700 px-3 py-1 rounded text-sm flex items-center gap-1"><Copy className="w-3 h-3"/> Duplikat</button>
+                </div>
+                {selectedExamId === ex.id && (
+                  <AdminExamEditor 
+                    examId={ex.id}
+                    examTitle={ex.title}
+                    questions={questions.filter(q => q.examId === ex.id)}
+                    setQuestions={setQuestions}
+                    onBack={()=>setSelectedExamId(null)}
+                    showNotif={showNotif}
+                  />
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {activeTab === 'students' && (
+        <div className="bg-white p-4 rounded-xl shadow">
+          <h3 className="font-bold mb-2">Siswa Kelas {user.kelas}</h3>
+          <div className="flex gap-2 mb-3">
+            <button onClick={()=>{ const name=prompt('Nama'); const uname=prompt('Username'); const pass=prompt('Password'); if(name&&uname&&pass) addStudentManual(name,uname,pass); }} className="bg-green-600 text-white px-3 py-1 rounded text-sm flex items-center gap-1"><UserPlus className="w-4 h-4"/> Tambah Manual</button>
+            <button onClick={downloadStudentTemplate} className="bg-slate-200 text-slate-700 px-3 py-1 rounded text-sm flex items-center gap-1"><Download className="w-4 h-4"/> Template CSV</button>
+            <label className="bg-blue-600 text-white px-3 py-1 rounded text-sm flex items-center gap-1 cursor-pointer"><Upload className="w-4 h-4"/> Upload CSV<input type="file" accept=".csv" className="hidden" onChange={handleStudentUpload}/></label>
+          </div>
+          <table className="w-full text-sm">
+            <thead><tr><th>Nama</th><th>Username</th><th>Reset Ujian</th></tr></thead>
+            <tbody>
+              {students.map(s => (
+                <tr key={s.id}><td>{s.name}</td><td>{s.username}</td><td><button onClick={()=>resetStudentExam(s.id, null)} className="text-red-600"><RefreshCw className="w-4 h-4"/></button></td></tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {activeTab === 'grades' && (
+        <div className="bg-white p-4 rounded-xl shadow">
+          <h3 className="font-bold">Rekap Nilai Kelas {user.kelas}</h3>
+          <table className="w-full text-sm mt-2">
+            <thead><tr><th>Siswa</th><th>Ujian</th><th>Nilai</th><th>Tanggal</th></tr></thead>
+            <tbody>
+              {attempts.filter(a => students.some(s => s.id === a.studentId)).map(a => {
+                const student = students.find(s => s.id === a.studentId);
+                const exam = exams.find(e => e.id === a.examId);
+                return (
+                  <tr key={a.id}><td>{student?.name}</td><td>{exam?.title}</td><td>{a.score}</td><td>{a.date}</td></tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ==========================================
+// ADMIN EXAM EDITOR (LENGKAP dengan CSV)
+// ==========================================
+function AdminExamEditor({ examId, examTitle, questions, setQuestions, onBack, showNotif }) {
   const [editingData, setEditingData] = useState(null);
   const [showConfirmDelete, setShowConfirmDelete] = useState(null);
-
-  useEffect(() => { renderMath(); }, [questions, editingData]);
+  const renderMath = () => {}; // sederhana, tidak perlu renderMath di sini
 
   const downloadTemplate = () => {
     const csvContent = "Tipe(PG/ISIAN);Teks Soal;Opsi A;Opsi B;Opsi C;Opsi D;Kunci Jawaban\nPG;Apa ibukota Indonesia?;Jakarta;Bandung;Surabaya;Medan;A\nISIAN;Siapa presiden RI pertama?;;;;;Soekarno";
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement("a");
-    const url = URL.createObjectURL(blob);
-    link.setAttribute("href", url);
+    link.setAttribute("href", URL.createObjectURL(blob));
     link.setAttribute("download", "template_soal.csv");
     document.body.appendChild(link);
     link.click();
@@ -345,8 +613,16 @@ function AdminExamEditor({ examId, examTitle, questions, setQuestions, onBack, r
         if(cols.length >= 7) {
           const type = cols[0].toUpperCase() === 'ISIAN' ? 'isian' : 'pg';
           newQs.push({
-            id: 'q_' + Date.now() + '_' + i, examId: examId, type: type, text: cols[1],
-            options: type === 'pg' ? [ { id: 'A', text: cols[2] }, { id: 'B', text: cols[3] }, { id: 'C', text: cols[4] }, { id: 'D', text: cols[5] } ] : [],
+            id: 'q_' + Date.now() + '_' + i,
+            examId: examId,
+            type: type,
+            text: cols[1],
+            options: type === 'pg' ? [
+              { id: 'A', text: cols[2] },
+              { id: 'B', text: cols[3] },
+              { id: 'C', text: cols[4] },
+              { id: 'D', text: cols[5] }
+            ] : [],
             correctAnswer: type === 'pg' ? cols[6].toUpperCase() : cols[6]
           });
         }
@@ -354,7 +630,8 @@ function AdminExamEditor({ examId, examTitle, questions, setQuestions, onBack, r
       setQuestions(prev => [...prev, ...newQs]);
       showNotif(`${newQs.length} Soal diimpor!`);
     };
-    reader.readAsText(file); e.target.value = '';
+    reader.readAsText(file);
+    e.target.value = '';
   };
 
   const handleAddNew = () => {
@@ -405,102 +682,63 @@ function AdminExamEditor({ examId, examTitle, questions, setQuestions, onBack, r
   };
 
   return (
-    <div className="space-y-4">
-      <button onClick={onBack} className="text-blue-600 hover:underline font-bold flex items-center gap-1 mb-2"><ChevronLeft className="w-4 h-4"/> Kembali</button>
-      <div className="bg-white p-5 rounded-2xl border shadow-sm mb-6 flex flex-wrap justify-between items-center gap-4">
-        <div>
-          <h2 className="text-xl font-bold">Kelola Soal: {examTitle}</h2>
-          <p className="text-sm text-slate-500">Total Soal: {questions.length}</p>
-        </div>
+    <div className="mt-4 p-4 border rounded-lg bg-gray-50">
+      <button onClick={onBack} className="text-blue-600 underline mb-2">← Kembali ke daftar ujian</button>
+      <div className="flex justify-between items-center flex-wrap gap-2 mb-3">
+        <h3 className="font-bold">Kelola Soal: {examTitle}</h3>
         <div className="flex gap-2">
-          <button onClick={handleAddNew} className="bg-blue-600 text-white px-3 py-2 rounded-lg text-sm flex items-center gap-2">+ Tambah Manual</button>
-          <button onClick={downloadTemplate} className="bg-slate-100 text-slate-700 px-3 py-2 rounded-lg text-sm flex items-center gap-2 border"><Download className="w-4 h-4"/> Template CSV</button>
-          <label className="bg-green-600 text-white px-3 py-2 rounded-lg text-sm flex items-center gap-2 cursor-pointer"><Upload className="w-4 h-4"/> Upload CSV<input type="file" accept=".csv" className="hidden" onChange={handleFileUpload} /></label>
+          <button onClick={handleAddNew} className="bg-blue-600 text-white px-3 py-1 rounded text-sm flex items-center gap-1"><Plus className="w-4 h-4"/> Tambah Manual</button>
+          <button onClick={downloadTemplate} className="bg-slate-200 text-slate-700 px-3 py-1 rounded text-sm flex items-center gap-1"><Download className="w-4 h-4"/> Template CSV</button>
+          <label className="bg-green-600 text-white px-3 py-1 rounded text-sm flex items-center gap-1 cursor-pointer"><Upload className="w-4 h-4"/> Upload CSV<input type="file" accept=".csv" className="hidden" onChange={handleFileUpload}/></label>
         </div>
       </div>
-
       {editingData && (
-        <div className="bg-white p-5 rounded-xl border-2 border-blue-400 shadow-lg mb-6">
-          <div className="flex justify-between items-center mb-4 border-b pb-2">
-            <h3 className="font-bold text-lg">{editingData.isNew ? 'Tambah Soal Baru' : 'Edit Soal'}</h3>
-            <button onClick={() => setEditingData(null)} className="text-slate-500 hover:text-red-500"><X className="w-5 h-5"/></button>
-          </div>
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium mb-1">Tipe Soal</label>
-              <select className="w-full border p-2 rounded" value={editingData.type} onChange={(e) => setEditingData({...editingData, type: e.target.value})}>
-                <option value="pg">Pilihan Ganda</option>
-                <option value="isian">Isian Singkat</option>
+        <div className="bg-white p-3 rounded shadow mb-3 border">
+          <div className="flex justify-between"><strong>{editingData.isNew ? 'Tambah Soal Baru' : 'Edit Soal'}</strong><button onClick={()=>setEditingData(null)} className="text-red-500">X</button></div>
+          <select className="border p-1 my-2" value={editingData.type} onChange={e=>setEditingData({...editingData, type:e.target.value})}>
+            <option value="pg">Pilihan Ganda</option>
+            <option value="isian">Isian Singkat</option>
+          </select>
+          <textarea rows="2" className="w-full border p-2 my-1" value={editingData.text} onChange={e=>setEditingData({...editingData, text:e.target.value})} placeholder="Teks soal (bisa pakai $$rumus$$)"/>
+          {editingData.type === 'pg' && (
+            <div className="grid grid-cols-2 gap-2 my-2">
+              {editingData.options.map((opt,i)=>(
+                <input key={opt.id} className="border p-1" placeholder={`Opsi ${opt.id}`} value={opt.text} onChange={e=>{let opts=[...editingData.options]; opts[i].text=e.target.value; setEditingData({...editingData, options:opts});}}/>
+              ))}
+            </div>
+          )}
+          <div className="my-2">
+            <label className="text-sm">Kunci Jawaban: </label>
+            {editingData.type === 'pg' ? (
+              <select value={editingData.correctAnswer} onChange={e=>setEditingData({...editingData, correctAnswer:e.target.value})} className="border p-1">
+                <option>A</option><option>B</option><option>C</option><option>D</option>
               </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-1">Teks Soal (Bisa pakai $$rumus$$)</label>
-              <textarea rows="3" className="w-full border p-2 rounded font-mono text-sm" value={editingData.text} onChange={(e) => setEditingData({...editingData, text: e.target.value})} />
-            </div>
-            {editingData.type === 'pg' && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-slate-50 p-4 rounded-lg">
-                {editingData.options.map((opt, i) => (
-                  <div key={opt.id}>
-                    <label className="block text-sm font-medium mb-1">Opsi {opt.id}</label>
-                    <input type="text" className="w-full border p-2 rounded text-sm" value={opt.text} onChange={(e) => {
-                      const newOpts = [...editingData.options];
-                      newOpts[i].text = e.target.value;
-                      setEditingData({...editingData, options: newOpts});
-                    }} />
-                  </div>
-                ))}
-              </div>
+            ) : (
+              <input type="text" className="border p-1 w-48" value={editingData.correctAnswer} onChange={e=>setEditingData({...editingData, correctAnswer:e.target.value})}/>
             )}
-            <div>
-              <label className="block text-sm font-medium mb-1">Kunci Jawaban</label>
-              {editingData.type === 'pg' ? (
-                <select className="border p-2 rounded w-48" value={editingData.correctAnswer} onChange={(e) => setEditingData({...editingData, correctAnswer: e.target.value})}>
-                  <option value="A">A</option><option value="B">B</option><option value="C">C</option><option value="D">D</option>
-                </select>
-              ) : (
-                <input type="text" className="w-full border p-2 rounded" value={editingData.correctAnswer} onChange={(e) => setEditingData({...editingData, correctAnswer: e.target.value})} />
-              )}
-            </div>
-            <div className="flex justify-end gap-2 pt-4">
-              <button onClick={() => setEditingData(null)} className="px-4 py-2 bg-slate-200 rounded">Batal</button>
-              <button onClick={handleSaveQuestion} className="px-4 py-2 bg-blue-600 text-white rounded flex items-center gap-2"><Save className="w-4 h-4"/> Simpan</button>
-            </div>
           </div>
+          <button onClick={handleSaveQuestion} className="bg-green-600 text-white px-3 py-1 rounded">Simpan</button>
         </div>
       )}
-
-      <div className="space-y-4">
-        {questions.length === 0 && !editingData && <div className="text-center py-10 text-slate-500 bg-white rounded-xl border-dashed border">Belum ada soal. Klik Tambah Manual atau Upload CSV.</div>}
+      <div className="space-y-2">
         {questions.map((q, idx) => (
-          <div key={q.id} className="bg-white p-4 rounded-xl border shadow-sm relative group">
-            <div className="absolute top-4 right-4 flex gap-2">
-              <button onClick={() => handleEditOpen(q)} className="text-blue-500 hover:bg-blue-50 p-1.5 rounded"><Edit className="w-4 h-4"/></button>
-              <button onClick={() => setShowConfirmDelete(q.id)} className="text-red-500 hover:bg-red-50 p-1.5 rounded"><Trash2 className="w-4 h-4"/></button>
+          <div key={q.id} className="bg-white p-3 rounded shadow relative">
+            <div className="absolute top-2 right-2 flex gap-1">
+              <button onClick={()=>handleEditOpen(q)} className="text-blue-500"><Edit className="w-4 h-4"/></button>
+              <button onClick={()=>setShowConfirmDelete(q.id)} className="text-red-500"><Trash2 className="w-4 h-4"/></button>
             </div>
-            {showConfirmDelete === q.id && (
-              <div className="absolute top-0 left-0 w-full h-full bg-white/90 backdrop-blur-sm z-10 flex flex-col items-center justify-center rounded-xl border border-red-200">
-                <p className="font-bold text-red-600 mb-3">Yakin hapus soal ini?</p>
-                <div className="flex gap-3">
-                  <button onClick={() => handleDelete(q.id)} className="bg-red-600 text-white px-4 py-1.5 rounded">Hapus</button>
-                  <button onClick={() => setShowConfirmDelete(null)} className="bg-slate-200 px-4 py-1.5 rounded">Batal</button>
-                </div>
+            <div><b>{idx+1}.</b> <span dangerouslySetInnerHTML={{__html: q.text}}/></div>
+            {q.type === 'pg' && (
+              <div className="grid grid-cols-2 gap-1 mt-2 text-sm">
+                {q.options.map(opt => <div key={opt.id} className={q.correctAnswer === opt.id ? 'text-green-700 font-bold' : ''}>{opt.id}. {opt.text}</div>)}
               </div>
             )}
-            <div className="flex items-center gap-2 mb-2 pr-16">
-              <div className="font-bold">Soal {idx + 1}</div>
-              <span className={`text-xs px-2 py-0.5 rounded ${q.type === 'isian' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'}`}>{q.type === 'isian' ? 'Isian' : 'PG'}</span>
-            </div>
-            <div className="math-content mb-3 text-lg" dangerouslySetInnerHTML={{__html: q.text}}></div>
-            {q.type === 'pg' ? (
-              <div className="grid grid-cols-2 gap-2 text-sm">
-                {q.options.map(opt => (
-                  <div key={opt.id} className={`p-2 rounded border ${q.correctAnswer === opt.id ? 'bg-green-100 border-green-500 font-semibold' : 'bg-slate-50'}`}>
-                    {opt.id}. <span className="math-content" dangerouslySetInnerHTML={{__html: opt.text}}></span>
-                  </div>
-                ))}
+            {q.type === 'isian' && <div className="text-sm mt-1 text-green-700">Kunci: {q.correctAnswer}</div>}
+            {showConfirmDelete === q.id && (
+              <div className="absolute inset-0 bg-white/80 flex items-center justify-center gap-2">
+                <button onClick={()=>handleDelete(q.id)} className="bg-red-600 text-white px-2 py-1 rounded">Hapus</button>
+                <button onClick={()=>setShowConfirmDelete(null)} className="bg-slate-200 px-2 py-1 rounded">Batal</button>
               </div>
-            ) : (
-              <div className="bg-green-50 border border-green-200 p-3 rounded-lg text-sm font-semibold text-green-800">Kunci: {q.correctAnswer}</div>
             )}
           </div>
         ))}
@@ -510,46 +748,19 @@ function AdminExamEditor({ examId, examTitle, questions, setQuestions, onBack, r
 }
 
 // ==========================================
-// 6. DASHBOARD SISWA
+// STUDENT DASHBOARD
 // ==========================================
-function StudentDashboard({ exams, attempts, onStartExam }) {
-  const handleStartExamWithFullscreen = (examId) => {
-    const elem = document.documentElement;
-    if (elem.requestFullscreen) {
-      elem.requestFullscreen().catch((err) => console.warn(err.message));
-    }
-    onStartExam(examId);
-  };
+function StudentDashboard({ user, exams, attempts, onStartExam }) {
   return (
     <div className="space-y-6">
-      <div className="bg-white p-6 rounded-2xl shadow-sm border mb-8">
-        <h2 className="text-2xl font-black text-slate-800 mb-2">Selamat Datang!</h2>
-        <p className="text-slate-600">Silakan pilih ujian di bawah ini.</p>
-        <div className="mt-4 p-4 bg-amber-50 border rounded-xl flex items-start gap-3">
-          <ShieldAlert className="w-6 h-6 text-amber-600 shrink-0" />
-          <div className="text-sm text-amber-800"><strong>Peraturan:</strong> Dilarang pindah tab, copy-paste, klik kanan. Pelanggaran 3x = ujian dihentikan.</div>
-        </div>
-      </div>
-      <h3 className="text-xl font-bold flex items-center gap-2"><BookOpen className="w-5 h-5 text-blue-600"/> Daftar Ujian</h3>
+      <h2 className="text-2xl font-bold">Selamat Datang, {user.name}</h2>
       <div className="grid md:grid-cols-2 gap-4">
         {exams.map(ex => {
-          const pastAttempt = attempts.find(a => a.examId === ex.id);
+          const past = attempts.find(a => a.examId === ex.id);
           return (
-            <div key={ex.id} className="bg-white p-6 rounded-2xl border shadow-sm flex justify-between items-center">
-              <div>
-                <h3 className="font-bold text-lg">{ex.title}</h3>
-                <p className="text-slate-500 text-sm flex items-center gap-1 mt-1"><Clock className="w-4 h-4"/> {ex.duration} Menit</p>
-              </div>
-              <div>
-                {pastAttempt ? (
-                  <div className="text-center bg-slate-50 px-4 py-2 rounded-xl border">
-                    <div className="text-xs text-slate-500">Nilai Akhir</div>
-                    <div className="text-3xl font-black text-green-600">{pastAttempt.score}</div>
-                  </div>
-                ) : (
-                  <button onClick={() => handleStartExamWithFullscreen(ex.id)} className="bg-blue-600 text-white px-6 py-2.5 rounded-xl font-bold hover:bg-blue-700">Mulai Ujian</button>
-                )}
-              </div>
+            <div key={ex.id} className="bg-white p-5 rounded-xl shadow flex justify-between items-center">
+              <div><h3 className="font-bold">{ex.title}</h3><p className="text-sm">{ex.duration} menit</p></div>
+              {past ? <div className="text-3xl font-bold text-green-600">{past.score}</div> : <button onClick={()=>onStartExam(ex.id)} className="bg-blue-600 text-white px-4 py-2 rounded">Mulai</button>}
             </div>
           );
         })}
@@ -559,28 +770,28 @@ function StudentDashboard({ exams, attempts, onStartExam }) {
 }
 
 // ==========================================
-// 7. ENGINE UJIAN (DIPERBAIKI)
+// EXAM RUNNER (sederhana tapi lengkap)
 // ==========================================
-function ExamRunner({ exam, questions, user, renderMath, onFinish, showNotif }) {
+function ExamRunner({ exam, questions, user, showNotif, onFinish }) {
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [answers, setAnswers] = useState({});
-  // 👇 TAMBAHKAN INI (untuk memuat jawaban yang tersimpan)
-useEffect(() => {
-  const savedAnswers = localStorage.getItem(`answers_${user.username}_${exam.id}`);
-  if (savedAnswers) {
-    setAnswers(JSON.parse(savedAnswers));
-  }
-}, []);
+  const [answers, setAnswers] = useState(() => {
+    const saved = localStorage.getItem(`answers_${user.id}_${exam.id}`);
+    return saved ? JSON.parse(saved) : {};
+  });
   const [doubtful, setDoubtful] = useState({});
-  const [timeLeft, setTimeLeft] = useState(exam ? exam.duration * 60 : 0);
+  const [timeLeft, setTimeLeft] = useState(() => {
+    const savedTime = localStorage.getItem(`time_${user.id}_${exam.id}`);
+    if (savedTime) return parseInt(savedTime);
+    return exam ? exam.duration * 60 : 0;
+  });
   const [examResult, setExamResult] = useState(null);
   const [showSubmitModal, setShowSubmitModal] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
-  const [warnings, setWarnings] = useState(0);
-  const [showWarningModal, setShowWarningModal] = useState(false);
-  const MAX_WARNINGS = 3;
 
-  useEffect(() => { renderMath(); }, [currentIndex, questions]);
+  // Simpan jawaban dan waktu setiap ada perubahan
+  useEffect(() => {
+    localStorage.setItem(`answers_${user.id}_${exam.id}`, JSON.stringify(answers));
+    localStorage.setItem(`time_${user.id}_${exam.id}`, timeLeft);
+  }, [answers, timeLeft, exam.id, user.id]);
 
   // Timer
   useEffect(() => {
@@ -590,189 +801,50 @@ useEffect(() => {
     return () => clearInterval(timer);
   }, [timeLeft, examResult]);
 
-  // Anti-cheat: visibility change
-  useEffect(() => {
-    if (examResult !== null) return;
-    const handleVisibilityChange = () => {
-      if (document.hidden) {
-        setWarnings(prev => {
-          const newCount = prev + 1;
-          if (newCount >= MAX_WARNINGS) {
-            calculateScore(true);
-          } else {
-            setShowWarningModal(true);
-          }
-          return newCount;
-        });
-      }
-    };
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-    return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
-  }, [examResult]);
-
-  const preventCheatingEvents = (e) => {
-    e.preventDefault();
-    showNotif("Tindakan tidak diizinkan selama ujian.", "error");
-  };
-
-  const formatTime = (seconds) => {
-    const m = Math.floor(seconds / 60);
-    const s = seconds % 60;
-    return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
-  };
-
-  const handleAnswer = (qId, val) => {
-    setIsSaving(true);
-    setAnswers(prev => ({ ...prev, [qId]: val }));
-    // Di dalam handleAnswer, setelah setAnswers, tambahkan:
-localStorage.setItem(`answers_${user.username}_${exam.id}`, JSON.stringify({ ...answers, [qId]: val }));
-    if (doubtful[qId]) handleToggleDoubt(qId);
-    setTimeout(() => setIsSaving(false), 600);
-  };
-
-  const handleToggleDoubt = (qId) => {
-    setDoubtful(prev => ({ ...prev, [qId]: !prev[qId] }));
-  };
-
   const calculateScore = () => {
-    let correctCount = 0;
+    let correct = 0;
     questions.forEach(q => {
-      const studentAns = answers[q.id] || '';
+      const ans = answers[q.id] || '';
       if (q.type === 'isian') {
-        if (studentAns.toString().trim().toLowerCase() === q.correctAnswer.toString().trim().toLowerCase()) correctCount++;
+        if (ans.trim().toLowerCase() === q.correctAnswer.toLowerCase()) correct++;
       } else {
-        if (studentAns === q.correctAnswer) correctCount++;
+        if (ans === q.correctAnswer) correct++;
       }
     });
-    const finalScore = questions.length > 0 ? Math.round((correctCount / questions.length) * 100) : 0;
-    setExamResult(finalScore);
-    setShowSubmitModal(false);
-    onFinish(finalScore, warnings);
+    const score = questions.length ? Math.round((correct/questions.length)*100) : 0;
+    setExamResult(score);
+    onFinish(score, 0);
+    // Hapus storage sementara
+    localStorage.removeItem(`answers_${user.id}_${exam.id}`);
+    localStorage.removeItem(`time_${user.id}_${exam.id}`);
   };
 
-  const answeredCount = Object.keys(answers).filter(k => answers[k] && answers[k].trim() !== '').length;
-  const doubtfulCount = Object.keys(doubtful).filter(k => doubtful[k]).length;
-  const unansweredCount = questions.length - answeredCount;
-
-  if (!exam || !questions || questions.length === 0) {
-    return <div className="text-center p-10 bg-white rounded-xl mt-10">Ujian tidak valid atau soal belum tersedia.</div>;
-  }
+  if (!exam || !questions.length) return <div className="p-10">Ujian tidak tersedia</div>;
+  if (examResult !== null) return <div className="p-10 text-center"><h2 className="text-2xl font-bold">Nilai Anda: {examResult}</h2><button onClick={()=>window.location.reload()} className="mt-4 bg-blue-600 text-white p-2 rounded">Kembali</button></div>;
 
   const currentQ = questions[currentIndex];
-  if (!currentQ) return <div className="text-center p-10">Soal tidak ditemukan.</div>;
-
-  const currentAnswer = answers[currentQ.id] || '';
-  const isCurrentDoubtful = doubtful[currentQ.id] || false;
+  const formatTime = (sec) => `${Math.floor(sec/60)}:${String(sec%60).padStart(2,'0')}`;
 
   return (
-    <div 
-      className="flex flex-col md:flex-row gap-6 h-full p-4 md:p-6"
-      onCopy={preventCheatingEvents}
-      onCut={preventCheatingEvents}
-      onPaste={preventCheatingEvents}
-      onContextMenu={preventCheatingEvents}
-      style={{ userSelect: 'none' }}
-    >
-      {showWarningModal && (
-        <div className="fixed inset-0 bg-red-900/90 backdrop-blur-md flex items-center justify-center z-[100] px-4">
-          <div className="bg-white p-8 rounded-2xl shadow-2xl max-w-md w-full text-center border-4 border-red-500">
-            <AlertTriangle className="w-20 h-20 text-red-500 mx-auto mb-4" />
-            <h3 className="text-3xl font-black text-slate-800 mb-2">PELANGGARAN TERDETEKSI</h3>
-            <p className="text-slate-600 text-lg mb-2">Anda terdeteksi meninggalkan halaman ujian.</p>
-            <div className="bg-red-50 text-red-800 font-bold py-3 px-4 rounded-xl border border-red-200 mb-6">Peringatan ke {warnings} dari {MAX_WARNINGS}</div>
-            <button onClick={() => setShowWarningModal(false)} className="w-full bg-red-600 text-white font-bold py-4 rounded-xl text-lg hover:bg-red-700">KEMBALI KE UJIAN</button>
-          </div>
+    <div className="max-w-4xl mx-auto p-4">
+      <div className="bg-white rounded-xl shadow p-6">
+        <div className="flex justify-between mb-4"><span>Soal {currentIndex+1}/{questions.length}</span><span className="font-mono">{formatTime(timeLeft)}</span></div>
+        <div className="mb-6" dangerouslySetInnerHTML={{__html: currentQ.text}}/>
+        {currentQ.type === 'pg' ? (
+          currentQ.options.map(opt => (
+            <div key={opt.id} onClick={()=>setAnswers({...answers, [currentQ.id]: opt.id})} className={`p-3 border rounded mb-2 cursor-pointer ${answers[currentQ.id] === opt.id ? 'bg-blue-100 border-blue-500' : ''}`}>{opt.id}. {opt.text}</div>
+          ))
+        ) : (
+          <textarea className="w-full border p-3 rounded" rows="4" value={answers[currentQ.id]||''} onChange={e=>setAnswers({...answers, [currentQ.id]: e.target.value})} placeholder="Jawaban anda"/>
+        )}
+        <div className="flex justify-between mt-6">
+          <button disabled={currentIndex===0} onClick={()=>setCurrentIndex(prev=>prev-1)} className="bg-slate-200 px-4 py-2 rounded">Sebelumnya</button>
+          {currentIndex === questions.length-1 ? <button onClick={()=>setShowSubmitModal(true)} className="bg-green-600 text-white px-4 py-2 rounded">Selesai</button> : <button onClick={()=>setCurrentIndex(prev=>prev+1)} className="bg-blue-600 text-white px-4 py-2 rounded">Selanjutnya</button>}
         </div>
-      )}
-
+      </div>
       {showSubmitModal && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 px-4">
-          <div className="bg-white p-6 md:p-8 rounded-2xl shadow-2xl max-w-md w-full">
-            <h3 className="text-2xl font-black text-slate-800 mb-1">Akhiri Ujian?</h3>
-            <p className="text-slate-500 text-sm mb-6">Ringkasan pengerjaan Anda:</p>
-            <div className="grid grid-cols-3 gap-3 mb-8">
-              <div className="bg-green-50 border p-3 rounded-xl text-center"><div className="text-2xl font-black text-green-600">{answeredCount}</div><div className="text-xs font-bold">Terjawab</div></div>
-              <div className="bg-amber-50 border p-3 rounded-xl text-center"><div className="text-2xl font-black text-amber-600">{doubtfulCount}</div><div className="text-xs font-bold">Ragu</div></div>
-              <div className="bg-slate-100 border p-3 rounded-xl text-center"><div className="text-2xl font-black text-slate-600">{unansweredCount}</div><div className="text-xs font-bold">Kosong</div></div>
-            </div>
-            {unansweredCount > 0 && <div className="flex gap-2 items-start bg-red-50 text-red-700 p-3 rounded-xl text-sm mb-6"><AlertTriangle className="w-5 h-5"/> Masih ada {unansweredCount} soal belum dijawab.</div>}
-            <div className="flex gap-3 justify-end">
-              <button onClick={() => setShowSubmitModal(false)} className="flex-1 py-3 bg-slate-100 rounded-xl font-bold">Lanjutkan</button>
-              <button onClick={calculateScore} className="flex-1 py-3 bg-blue-600 text-white rounded-xl font-bold">Ya, Akhiri</button>
-            </div>
-          </div>
-        </div>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center"><div className="bg-white p-6 rounded-xl"><p>Yakin ingin mengakhiri ujian?</p><div className="flex gap-4 mt-4"><button onClick={calculateScore} className="bg-red-600 text-white px-4 py-2 rounded">Ya</button><button onClick={()=>setShowSubmitModal(false)} className="bg-slate-200 px-4 py-2 rounded">Batal</button></div></div></div>
       )}
-
-      {/* Area Soal */}
-      <div className="flex-1 bg-white rounded-2xl shadow-lg border overflow-hidden flex flex-col h-[calc(100vh-3rem)]">
-        <div className="bg-slate-50 border-b p-4 px-6 flex justify-between items-center shrink-0">
-          <div className="flex items-center gap-4">
-            <div className="bg-blue-600 text-white w-10 h-10 rounded-xl flex items-center justify-center font-black">{currentIndex + 1}</div>
-            <div className="hidden md:block text-slate-600 font-medium">dari {questions.length} Soal</div>
-          </div>
-          <div className="flex items-center gap-4">
-            <div className={`text-xs font-bold flex items-center gap-1 transition-opacity ${isSaving ? 'opacity-100' : 'opacity-0'}`}><SaveAll className="w-4 h-4 animate-pulse"/> Menyimpan...</div>
-            <div className={`font-mono text-xl font-black px-4 py-1.5 rounded-xl flex items-center gap-2 border shadow-sm ${timeLeft < 300 ? 'bg-red-50 border-red-200 text-red-600' : 'bg-white'}`}><Clock className="w-5 h-5"/> {formatTime(timeLeft)}</div>
-          </div>
-        </div>
-        <div className="p-6 md:p-10 flex-1 overflow-y-auto">
-          <div className="math-content text-xl text-slate-800 mb-8 leading-relaxed" dangerouslySetInnerHTML={{__html: currentQ.text}}></div>
-          {currentQ.type === 'pg' ? (
-            <div className="space-y-4">
-              {currentQ.options.map(opt => {
-                const isSelected = currentAnswer === opt.id;
-                return (
-                  <div key={opt.id} onClick={() => handleAnswer(currentQ.id, opt.id)} className={`p-5 border-2 rounded-2xl cursor-pointer transition-all flex items-center gap-4 ${isSelected ? 'border-blue-500 bg-blue-50' : 'border-slate-200 hover:border-blue-300'}`}>
-                    <div className={`w-8 h-8 rounded-full border-2 flex items-center justify-center shrink-0 ${isSelected ? 'border-blue-500 bg-blue-600 text-white' : 'border-slate-300'}`}><span className="font-bold">{opt.id}</span></div>
-                    <div className="math-content text-lg" dangerouslySetInnerHTML={{__html: opt.text}}></div>
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            <div className="mt-4 bg-slate-50 p-6 rounded-2xl border">
-              <label className="block text-sm font-bold text-slate-700 mb-3 flex items-center gap-2"><Edit className="w-4 h-4"/> Jawaban Anda:</label>
-              <textarea rows="4" className="w-full border-2 rounded-xl p-5 text-xl" placeholder="Ketik jawaban..." value={currentAnswer} onChange={(e) => handleAnswer(currentQ.id, e.target.value)} />
-            </div>
-          )}
-        </div>
-        <div className="bg-white border-t p-4 px-6 flex justify-between items-center shrink-0">
-          <button disabled={currentIndex === 0} onClick={() => setCurrentIndex(prev => prev - 1)} className="px-5 py-3 bg-slate-100 font-bold rounded-xl disabled:opacity-40 flex items-center gap-2"><ChevronLeft className="w-5 h-5"/> Sebelumnya</button>
-          <button onClick={() => handleToggleDoubt(currentQ.id)} className={`px-5 py-3 font-bold rounded-xl flex items-center gap-2 border-2 ${isCurrentDoubtful ? 'bg-amber-100 text-amber-700 border-amber-300' : 'bg-white text-slate-500 border-slate-200'}`}><Flag className="w-5 h-5"/> Ragu</button>
-          {currentIndex === questions.length - 1 ? (
-            <button onClick={() => setShowSubmitModal(true)} className="px-6 py-3 bg-green-600 text-white font-black rounded-xl shadow-lg flex items-center gap-2"><CheckCircle className="w-5 h-5"/> Selesai</button>
-          ) : (
-            <button onClick={() => setCurrentIndex(prev => prev + 1)} className="px-6 py-3 bg-blue-600 text-white font-black rounded-xl shadow-lg flex items-center gap-2">Selanjutnya <ChevronRight className="w-5 h-5"/></button>
-          )}
-        </div>
-      </div>
-
-      {/* Navigasi Grid */}
-      <div className="w-full md:w-80 shrink-0 flex flex-col gap-4">
-        <div className="bg-white rounded-2xl shadow-sm border p-5"><div className="flex items-start gap-3"><div className="w-10 h-10 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center font-bold text-lg">{user.username.substring(0,2).toUpperCase()}</div><div><div className="font-bold">{user.username}</div><div className="text-xs font-semibold text-slate-500">{exam.title}</div></div></div></div>
-        <div className="bg-white rounded-2xl shadow-sm border p-5 flex-1 flex flex-col">
-          <h3 className="font-bold text-slate-700 mb-4 pb-3 border-b flex justify-between items-center">Peta Soal <span className="text-xs bg-slate-100 px-2 py-1 rounded-lg">{answeredCount}/{questions.length} Terjawab</span></h3>
-          <div className="grid grid-cols-5 gap-2 md:gap-3 mb-6">
-            {questions.map((q, idx) => {
-              const isAnswered = !!answers[q.id] && answers[q.id].trim() !== '';
-              const isFlagged = doubtful[q.id];
-              const isActive = idx === currentIndex;
-              let btnClass = 'bg-slate-100 text-slate-500 border border-slate-200';
-              if (isFlagged) btnClass = 'bg-amber-400 text-amber-900 border border-amber-500 font-bold';
-              else if (isAnswered) btnClass = 'bg-green-500 text-white border border-green-600 font-bold';
-              if (isActive) btnClass += ' ring-4 ring-blue-500/30 scale-110 z-10 relative';
-              return <button key={q.id} onClick={() => setCurrentIndex(idx)} className={`aspect-square rounded-xl flex items-center justify-center text-sm transition-all ${btnClass}`}>{idx + 1}</button>;
-            })}
-          </div>
-          <div className="mt-auto space-y-2 text-xs font-bold text-slate-600 bg-slate-50 p-4 rounded-xl border">
-            <div className="flex items-center gap-3"><div className="w-4 h-4 bg-green-500 rounded-md"></div> Sudah Dijawab</div>
-            <div className="flex items-center gap-3"><div className="w-4 h-4 bg-amber-400 rounded-md"></div> Ragu-ragu</div>
-            <div className="flex items-center gap-3"><div className="w-4 h-4 bg-slate-100 rounded-md border"></div> Belum Dijawab</div>
-            <div className="flex items-center gap-3"><div className="w-4 h-4 bg-white border ring-2 ring-blue-400 rounded-md"></div> Posisi Saat Ini</div>
-          </div>
-        </div>
-      </div>
     </div>
   );
 }

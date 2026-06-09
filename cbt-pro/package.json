@@ -2,7 +2,7 @@
   "name": "cbt-pro",
   "private": true,
   "version": "0.0.0",
-  "homepage": "https://fzlqwerty01-bangnaff.github.io/cbt-pro"
+  "homepage": "https://fzlqwerty01-bangnaff.github.io/cbt-pro",
   "type": "module",
   "scripts": {
     "dev": "vite",
